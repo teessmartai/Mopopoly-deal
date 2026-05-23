@@ -171,18 +171,23 @@ You only need **one** Android phone to be the host. It can also play.
 
 ### Step 1 — Get the game app (`MopopolyDeal.apk`)
 
-1. Open the repository on **GitHub** in any browser.
-2. Click the **"Actions"** tab near the top.
-3. In the list on the left, click **"Build Android APK"**.
-4. Click the most recent successful run (green check ✓). To get a fresh one,
-   click **"Run workflow"** first and wait a few minutes.
-5. Scroll to **"Artifacts"** and download **"MopopolyDeal-android"**. It arrives
-   as a `.zip`.
-6. On the Android phone, **unzip it** (most file managers do this with a tap).
-   Inside is **`MopopolyDeal.apk`**.
+Download it **directly** from the project's GitHub **Releases** page — no unzipping:
+
+1. Open the repository on **GitHub** in the Android phone's browser.
+2. Click **"Releases"** (on the right-hand side of the repo's front page, or add
+   `/releases` to the repo address).
+3. Open **"Mopopoly Deal — latest Android APK"**.
+4. Under **"Assets"**, tap **`MopopolyDeal.apk`**. It downloads as a single,
+   ready-to-install file.
 
 > The file is fairly large (around 40–70 MB). That's normal — it has a complete
 > copy of the game's engine built inside it, so nothing else needs installing.
+>
+> *No release yet?* A maintainer can create one in a couple of minutes: on the
+> **Actions** tab, choose **"Build Android APK"** → **"Run workflow"**; when it
+> finishes the APK appears on the Releases page above. (The Actions tab also has
+> a "MopopolyDeal-android" artifact, but GitHub forces that to download as a
+> `.zip` — the Release is the direct `.apk`.)
 
 ### Step 2 — Install the app (one-time friction, fully expected)
 
