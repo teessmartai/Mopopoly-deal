@@ -6,7 +6,11 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const WebSocket = require('ws');
-const qrcode = require('qrcode-terminal');
+// qrcode-terminal renders the console QR for the Windows .exe. It is optional:
+// the embedded Android runtime has no console and may not bundle this module,
+// so a missing require must never crash the server.
+let qrcode = null;
+try { qrcode = require('qrcode-terminal'); } catch (e) { /* no console QR available */ }
 
 const { Game } = require('./game/engine');
 const persistence = require('./persistence');
@@ -44,7 +48,17 @@ const MIME = {
 
 const server = http.createServer((req, res) => {
   let urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+  // Networking info for the host screen (used by public/host.html, and handy
+  // for the Android wrapper). os.networkInterfaces() works on nodejs-mobile.
+  if (urlPath === '/api/hostinfo') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ ips: lanAddresses(), port: PORT }));
+    return;
+  }
   if (urlPath === '/') urlPath = '/index.html';
+  // The host screen: shows the LAN URL + a client-side QR code. On Android the
+  // app's WebView opens this so the host phone can show the QR and also play.
+  if (urlPath === '/host') urlPath = '/host.html';
   // Prevent path traversal.
   const safe = path.normalize(urlPath).replace(/^(\.\.[/\\])+/, '');
   const filePath = path.join(PUBLIC_DIR, safe);
@@ -229,6 +243,13 @@ function printHostScreen() {
   const ips = lanAddresses();
   const best = ips[0] || 'localhost';
   const url = `http://${best}:${PORT}`;
+  // No real terminal (embedded Android runtime, or stdout piped) or no QR
+  // module: emit a single plain marker line and skip the console box/QR. The
+  // marker still contains "game server is running" so tooling can detect boot.
+  if (!qrcode || !process.stdout || !process.stdout.isTTY) {
+    console.log(`MOPOPOLY DEAL — game server is running at ${url} (host screen: ${url}/host)`);
+    return;
+  }
   const line = '='.repeat(58);
   console.log('\n' + line);
   console.log('   MOPOPOLY DEAL  —  game server is running');

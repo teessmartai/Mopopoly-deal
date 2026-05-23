@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Plain platform theme (no AppCompat dependency needed). -->
+    <style name="AppTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#0d3b2e</item>
+        <item name="android:windowBackground">#0d3b2e</item>
+    </style>
+</resources>

@@ -17,7 +17,8 @@ documented community convention was used and is listed here.
 | Console QR / address | **`qrcode-terminal`** | Pure-JS QR rendering in the host's console window; no native modules. |
 | Client | **Vanilla HTML/CSS/JS, no framework, no build step** | Keeps the artifact simple and easy to bundle; mobile-first; nothing to compile. |
 | Single .exe | **`@yao-pkg/pkg`** | Maintained fork of `pkg` that supports Node 20/22 and **cross-compiles** to `node22-win-x64` from any OS. Embeds the Node runtime + the `public/` assets into one file. |
-| Persistence | **Single JSON file beside the executable** | Survives accidental restarts; trivially inspectable; no database to install. |
+| Android APK | **`nodejs-mobile` (Node ~18) embedded in a bare Android/Kotlin app** | Runs the **same `src/`** unchanged on a real Node runtime on the phone. No engine rewrite, single authoritative server, no extra install for players. See the dedicated section below. |
+| Persistence | **Single JSON file** (beside the .exe, or in the app's private files dir on Android via `MOPOPOLY_DATA_DIR`) | Survives accidental restarts; trivially inspectable; no database to install. |
 
 ### Why pkg and not Node's built-in SEA
 The brief allows either `pkg` or Node's Single Executable Application feature.
@@ -41,6 +42,111 @@ manual asset-injection story.
   rule logic is server-side, and **hidden information (other players' hands) is
   never sent to clients that shouldn't see it** — opponents are sent only a
   hand *count*. This is verified by an automated test.
+
+---
+
+## Hosting target #2: Android APK (nodejs-mobile)
+
+The Android host is **additive** — the Windows `.exe` path is unchanged. The
+goal: a non-technical person installs **one APK** on a personal phone, taps the
+icon, and the phone becomes the LAN game server (handy when the only computer is
+a locked-down work laptop that won't run unsigned executables or accept firewall
+prompts). Players still join from any phone browser.
+
+### Why nodejs-mobile, and how `src/` is reused
+- The project has **no native Node dependencies** (`ws` is pure JS; its optional
+  native accelerators are omitted on mobile), which is exactly what makes
+  embedding a Node runtime on Android feasible.
+- [`nodejs-mobile`](https://github.com/nodejs-mobile/nodejs-mobile) (the
+  maintained community fork) ships a prebuilt `libnode.so`. We use a **bare
+  Android/Kotlin project** (under `android/`) rather than the Cordova/React
+  Native plugins, because we need precise control over a **foreground service**,
+  the Android-14 `foregroundServiceType`, the runtime notification permission,
+  and the WebView lifecycle — things the plugins don't give for free.
+- **`src/` stays the single source of truth.** `scripts/prepare-node-project.sh`
+  copies `src/` + `public/` into the app's `assets/nodejs-project/` at build
+  time (a git-ignored artifact) and installs only `ws`. A thin
+  `android/node-template/mobile-main.js` sets `MOPOPOLY_DATA_DIR` from an argv
+  passed by the native layer, then `require('./src/server.js')`. The engine,
+  protocol, persistence, and client are **byte-for-byte the same** as the exe.
+- **Node version:** nodejs-mobile targets **Node ~18** (pinned to `18.20.4` in
+  the workflow). The exe uses Node 22. `src/` is kept compatible with both — it
+  avoids Node 20+/22-only APIs; `crypto.randomUUID()`, `os.networkInterfaces()`,
+  and `ws@8` all work on Node 18. (`npm test` runs on the repo's Node and guards
+  the shared logic.)
+
+### Code changes that make `src/` work on both targets
+1. **`src/persistence.js`** now prefers `MOPOPOLY_DATA_DIR` when set (the app's
+   writable files dir on Android), then `process.pkg` (beside the exe), then cwd.
+2. **`src/server.js`** gained:
+   - `GET /api/hostinfo` → `{ ips, port }` (reuses `lanAddresses()`),
+   - a host screen at `GET /host` (`public/host.html` + `host.js`) that fetches
+     `/api/hostinfo` and renders a **client-side QR** with a vendored, single-file
+     **`qrcode-generator`** (MIT, `public/vendor/qrcode.js`) — no network call,
+   - a **guarded `qrcode-terminal` require** and a **TTY-guarded** console host
+     screen: the fancy console QR box only prints in a real terminal (the exe's
+     console window). With no TTY or no module (the embedded runtime) it prints a
+     single marker line instead and never crashes. The exe's console output is
+     unchanged. (The `/host` screen is also bundled into the exe, as a bonus.)
+
+### Android wrapper specifics (`android/`)
+- **Embedding:** `NodeBridge` (`System.loadLibrary("node")` then `"native-lib"`)
+  exposes `startNodeWithArguments`. The JNI glue in `cpp/native-lib.cpp` builds a
+  contiguous argv buffer, redirects Node's stdout/stderr to **logcat**, and calls
+  `node::Start` — modeled on the official nodejs-mobile native-gradle sample.
+- **Foreground service** (`NodeService`): starts the server on a background
+  thread and shows an ongoing notification ("Mopopoly Deal is hosting — tap to
+  open"). Declared `foregroundServiceType="specialUse"` (with the required
+  `PROPERTY_SPECIAL_USE_FGS_SUBTYPE` justification) — the honest fit for a
+  sideloaded app whose job is *hosting a local server*, which is neither
+  `dataSync` nor `mediaPlayback`. Permissions: `INTERNET`,
+  `ACCESS_NETWORK_STATE`, `FOREGROUND_SERVICE`,
+  `FOREGROUND_SERVICE_SPECIAL_USE`, `POST_NOTIFICATIONS` (Android 13+ runtime
+  prompt), `WAKE_LOCK`.
+- **WebView UX** (`MainActivity`): once `/api/hostinfo` responds, the WebView
+  loads `http://127.0.0.1:47800/host`, so the host phone shows the QR/IP **and**
+  can play as a seated client (the player client derives its WebSocket URL from
+  `location.host`, so `127.0.0.1` works for the host while other phones use the
+  LAN IP). `domStorageEnabled = true` so `localStorage` keeps the session token —
+  this is what makes the **host phone's own reconnection** work.
+- **Data dir:** the app's `filesDir` is passed to Node as `argv[2]` →
+  `MOPOPOLY_DATA_DIR`, so the save file lives in app-private storage and an
+  in-progress game survives closing/reopening the app.
+- **ABIs / minSdk:** `arm64-v8a` + `armeabi-v7a`; `minSdk 24`, `targetSdk 34`.
+- **Stopping:** a "Stop hosting" notification action stops the service and ends
+  the process. nodejs-mobile can only start Node **once per process lifetime**,
+  so a clean stop/restart of the server requires ending the process; the saved
+  game resumes on next launch.
+
+### Battery, Doze, and "keep it awake"
+- The foreground service + a held `PARTIAL_WAKE_LOCK` keep the server responding
+  while the screen is off, and keep Android from killing the process under normal
+  conditions. **Doze**/app-standby can still throttle networking if the phone is
+  left **unplugged and motionless**, and some vendors (Xiaomi, Huawei, Samsung,
+  OnePlus…) run aggressive battery managers that may pause background apps.
+- Guidance (documented in the README): **keep the app open, the phone awake, and
+  plugged in** for longer sessions. This is the Android analogue of "keep the
+  black console window open" on Windows.
+
+### APK size & install friction (analogous to the exe's SmartScreen)
+- **Size:** ~**40–70 MB** with both ABIs (~**30–45 MB** if built for `arm64-v8a`
+  only), because it embeds the Node runtime — the direct counterpart to the
+  ~55–90 MB exe.
+- **Unknown-sources + Play Protect:** sideloading requires enabling **"Install
+  unknown apps"** for the installing app and tapping through a **Google Play
+  Protect** "unscanned/unsafe app" warning. This is **unavoidable** without
+  publishing to the Play Store (out of scope: needs a paid developer account and
+  review). It's the one-time Android equivalent of the Windows
+  **SmartScreen/Firewall** prompts, and is documented tap-by-tap in the README.
+- **iOS is out of scope:** distributing an iOS app needs the App Store / a paid
+  Apple developer account and signing. iPhones can still **play** as browser
+  clients, and can host via the Windows exe on a laptop.
+
+### Unchanged from the exe
+Full 110-card deck, every rule and edge-case decision below, the
+authoritative-server + hidden-info model, per-player token reconnection, the
+single-JSON-file save, and "one game at a time per running host" all apply
+identically on Android.
 
 ---
 
@@ -171,10 +277,11 @@ trivially (slightly more Pass Go cards) and keeps the deck at exactly 110.
    action card (fully implemented). Automatic set-doubling is a house rule, so it
    was intentionally **not** implemented to stay faithful.
 8. **The "host" is the first player to join** (seat 0). They get Start Game /
-   Skip / Play Again controls. The laptop's console window is the connection
-   board (address + QR); there is no separate spectator-only host screen, though
-   anyone who can't get a seat (game in progress or table full) is dropped into a
-   **read-only spectator** view automatically.
+   Skip / Play Again controls. The connection board is the laptop's console
+   window (address + QR) and/or the **`/host` screen** (address + client-side QR,
+   shown automatically in the Android app's WebView and also reachable in any
+   browser). Anyone who can't get a seat (game in progress or table full) is
+   dropped into a **read-only spectator** view automatically.
 9. **Just Say No** is normally consumed via the response prompt. It can also be
    banked as money like any other action card.
 
@@ -188,6 +295,14 @@ trivially (slightly more Pass Go cards) and keeps the deck at exactly 110.
   SmartScreen warning) requires a paid certificate and is out of scope.
 - **The .exe is unsigned** and ~55–90 MB because it embeds the Node runtime.
   This is expected for `pkg`-style single executables.
+- **The APK is sideloaded** (Play Protect + "install unknown apps" friction) and
+  ~40–70 MB because it embeds Node. Release builds without a configured keystore
+  fall back to the debug signing key (installable, but not upgradeable in place).
+  Publishing to the Play Store (which would remove the friction) is out of scope.
+- **Android hosts need the phone kept awake/plugged in**; Doze and vendor battery
+  managers can otherwise throttle or pause a backgrounded server. **iOS hosting is
+  out of scope** (App Store / paid developer account required); iPhones can still
+  play as clients.
 - **Buildings can't be handed over as standalone payment** (decision #5).
 - **Wild placement on receipt is automatic** rather than prompted (decision #2);
   the receiver re-assigns on their turn if they disagree with the auto-choice.

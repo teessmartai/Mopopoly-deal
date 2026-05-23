@@ -1,0 +1,17 @@
+# Gradle / Android build outputs
+.gradle/
+build/
+app/build/
+local.properties
+
+# Downloaded nodejs-mobile prebuilt libraries (fetched by the build script / CI)
+app/libnode/
+
+# Generated embedded Node project (assembled from ../src and ../public)
+app/src/main/assets/nodejs-project/
+
+# Release signing material — never commit these
+keystore.properties
+app/release.keystore
+*.keystore
+*.jks

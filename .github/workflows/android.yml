@@ -1,0 +1,117 @@
+name: Build Android APK
+
+# How a non-technical maintainer gets the .apk:
+#   1. Open the repository on GitHub.
+#   2. Click the "Actions" tab.
+#   3. Choose "Build Android APK" on the left, then "Run workflow".
+#   4. When it finishes (green check), open the run and download the
+#      "MopopolyDeal-android" artifact (a .zip containing the .apk).
+# No terminal or local tools required. See README.md → "Host on an Android phone".
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  workflow_dispatch: {}
+
+permissions:
+  contents: write   # needed to attach the apk to a Release on tag builds
+
+env:
+  # nodejs-mobile prebuilt core library (Node ~18). Bump to a newer published
+  # release from https://github.com/nodejs-mobile/nodejs-mobile/releases as needed.
+  NODEJS_MOBILE_VERSION: '18.20.4'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests (shared game engine + server)
+        run: npm test
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK and CMake
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "ndk;26.1.10909125" "cmake;3.22.1"
+
+      - name: Download nodejs-mobile prebuilt libraries
+        run: |
+          set -euo pipefail
+          ZIP="nodejs-mobile-v${NODEJS_MOBILE_VERSION}-android.zip"
+          URL="https://github.com/nodejs-mobile/nodejs-mobile/releases/download/v${NODEJS_MOBILE_VERSION}/${ZIP}"
+          echo "Downloading $URL"
+          curl -fL --retry 4 --retry-delay 4 "$URL" -o /tmp/nodejs-mobile.zip
+          rm -rf /tmp/nm && mkdir -p /tmp/nm android/app/libnode
+          unzip -q /tmp/nodejs-mobile.zip -d /tmp/nm
+          # Locate the folder that contains bin/ and include/ (handles an
+          # optional wrapping directory inside the zip). -print -quit avoids a
+          # SIGPIPE under `set -o pipefail`.
+          BIN_DIR="$(find /tmp/nm -maxdepth 3 -type d -name bin -print -quit)"
+          SRC="$(dirname "$BIN_DIR")"
+          cp -R "$SRC/bin" android/app/libnode/bin
+          cp -R "$SRC/include" android/app/libnode/include
+          echo "libnode ABIs:"; ls android/app/libnode/bin
+          test -f android/app/libnode/include/node/node.h
+
+      - name: Assemble the embedded Node project (from src/ + public/)
+        run: bash scripts/prepare-node-project.sh
+
+      - name: Configure release signing (if secrets are present)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "${KEYSTORE_BASE64:-}" ]; then
+            echo "Release keystore secret found — building a signed release APK."
+            echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+            {
+              echo "storeFile=release.keystore"
+              echo "storePassword=${KEYSTORE_PASSWORD}"
+              echo "keyAlias=${KEY_ALIAS}"
+              echo "keyPassword=${KEY_PASSWORD}"
+            } > android/keystore.properties
+          else
+            echo "No keystore secret set — the release APK falls back to the debug key."
+          fi
+
+      - name: Build the APK
+        working-directory: android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon assembleRelease
+
+      - name: Upload the APK as a downloadable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MopopolyDeal-android
+          path: android/app/build/outputs/apk/release/*.apk
+          retention-days: 5      # keep storage small; rebuild any time
+
+      - name: Attach the APK to a GitHub Release (tagged builds only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: android/app/build/outputs/apk/release/*.apk
