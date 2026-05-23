@@ -100,6 +100,21 @@ async function run() {
   console.log('  ok  reconnect restores seat and hand');
   passed++;
 
+  // Reclaim test: Bob comes back on a "different address" (a fresh client with
+  // no token) and reclaims his seat by index. He gets the same seat + hand back
+  // and is handed the seat's token for future resumes.
+  b2.ws.close();
+  await wait(150);
+  await until(() => a.state.players[1].connected === false, 2000);
+  const b3 = new Client(); await b3.open();
+  b3.send({ type: 'reclaim', seat: bobSeat });
+  await until(() => b3.seat === bobSeat && b3.state && b3.state.yourHand.length === bobHandLen, 2000);
+  assert.strictEqual(b3.state.yourSeat, bobSeat);
+  assert.strictEqual(b3.token, bobToken, 'reclaim returns the seat token');
+  await until(() => a.state.players[1].connected === true, 2000);
+  console.log('  ok  reclaim restores seat by index without a token');
+  passed++;
+
   serverProc.kill();
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

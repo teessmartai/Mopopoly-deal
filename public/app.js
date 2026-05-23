@@ -26,6 +26,7 @@ let ws = null;
 let state = null;
 let mySeat = null;
 let token = localStorage.getItem('mopopoly_token') || null;
+let watching = false; // chose to spectate instead of taking/reclaiming a seat
 let reconnectDelay = 500;
 let paymentSel = new Set(); // transient selection for payment/discard prompts
 let lastPendingKey = null;
@@ -58,43 +59,92 @@ function act(action, params) { sendRaw(Object.assign({ type: 'action', action },
 
 function handleMessage(msg) {
   if (msg.type === 'welcome') {
-    token = msg.token; mySeat = msg.seat;
+    token = msg.token; mySeat = msg.seat; watching = false;
     localStorage.setItem('mopopoly_token', token);
-    $('join').classList.add('hidden');
-    $('game').classList.remove('hidden');
+    showGame();
   } else if (msg.type === 'need_join') {
-    // Stored token no longer valid (e.g. a brand new game). Show join screen.
-    mySeat = null;
+    // Our stored token doesn't match a seat in this game — either a brand new
+    // game, or we returned on a different address (so this origin's localStorage
+    // has no/old token). Drop the dead token so a reconnecting socket stops
+    // re-sending it and bouncing us back here, then show the join/rejoin gate.
+    localStorage.removeItem('mopopoly_token');
+    token = null; mySeat = null;
     showJoin(msg.reason);
   } else if (msg.type === 'state') {
     state = msg.state;
     if (state.yourSeat != null && state.yourSeat >= 0) mySeat = state.yourSeat;
     render();
+    maybeGate();
   } else if (msg.type === 'error') {
     toast(msg.message);
   }
+}
+
+function showGame() {
+  $('join').classList.add('hidden');
+  $('game').classList.remove('hidden');
+}
+
+// When we have no token (so no `resume` is pending) and a game is already
+// underway, show the rejoin/watch gate instead of the useless name-entry form.
+// While a token is in flight we let `welcome`/`need_join` drive the screen, so
+// reconnecting players don't flicker through the gate.
+function maybeGate() {
+  if (token || mySeat != null || watching) return;
+  if (!state || state.phase === 'lobby') return;
+  const reason = state.players.length >= state.maxPlayers ? 'full' : 'in_progress';
+  showJoin(reason);
 }
 
 function showJoin(reason) {
   $('game').classList.add('hidden');
   $('join').classList.remove('hidden');
   const sub = $('join-sub'); const btn = $('join-btn');
-  if (reason === 'in_progress') {
-    sub.textContent = 'A game is already in progress. You can watch it, or wait for the next round to join.';
-    btn.textContent = 'Watch Game';
-    btn.onclick = () => { $('join').classList.add('hidden'); $('game').classList.remove('hidden'); };
+  clearReclaimList();
+  if (reason === 'in_progress' || reason === 'full') {
+    sub.textContent = reason === 'full'
+      ? 'The table is full (5 players).'
+      : 'A game is already in progress.';
     $('name-input').classList.add('hidden');
-  } else if (reason === 'full') {
-    sub.textContent = 'The table is full (5 players). You can watch instead.';
+    renderReclaimList();
     btn.textContent = 'Watch Game';
-    btn.onclick = () => { $('join').classList.add('hidden'); $('game').classList.remove('hidden'); };
-    $('name-input').classList.add('hidden');
+    btn.onclick = startWatching;
   } else {
     sub.textContent = 'Enter your name to join the table.';
     btn.textContent = 'Join Game';
     $('name-input').classList.remove('hidden');
     btn.onclick = doJoin;
   }
+}
+
+function startWatching() {
+  watching = true;
+  showGame();
+}
+
+// Returning players whose token was lost (e.g. the host's IP changed, so they
+// scanned a new address) can tap their seat to reclaim it. The server hands the
+// seat's token back, so this origin can resume normally afterwards.
+function renderReclaimList() {
+  const players = (state && state.players) || [];
+  if (!players.length) return;
+  const card = document.querySelector('#join .join-card');
+  const box = el('div'); box.id = 'reclaim-list';
+  box.appendChild(el('p', 'reclaim-head', 'Already in this game? Tap your name to rejoin your seat:'));
+  for (const p of players) {
+    const b = el('button', 'reclaim');
+    b.appendChild(el('span', 'dot' + (p.connected ? '' : ' off')));
+    b.appendChild(el('span', 'reclaim-name', p.name + (p.isHost ? ' (host)' : '')));
+    if (p.connected) b.appendChild(el('span', 'reclaim-tag', 'online'));
+    b.onclick = () => sendRaw({ type: 'reclaim', seat: p.seat });
+    box.appendChild(b);
+  }
+  card.insertBefore(box, $('join-btn'));
+}
+
+function clearReclaimList() {
+  const ex = $('reclaim-list');
+  if (ex) ex.remove();
 }
 
 function doJoin() {

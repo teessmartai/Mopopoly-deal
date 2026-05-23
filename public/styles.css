@@ -50,6 +50,16 @@ button { font-family: inherit; cursor: pointer; border: none; }
 .danger { background: var(--danger); color: #fff; font-weight: 700; border-radius: 10px; }
 .msg { color: var(--gold); min-height: 18px; font-size: 14px; margin: 10px 0 0; }
 .conn { color: var(--muted); font-size: 12px; margin-top: 14px; }
+#reclaim-list { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 16px; }
+.reclaim-head { color: var(--muted); font-size: 13px; margin: 0 0 2px; }
+button.reclaim {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 12px 14px; border-radius: 10px; background: #0e3e31;
+  border: 2px solid #2c6c58; color: var(--ink); font-size: 16px;
+}
+button.reclaim:active { transform: translateY(1px); }
+.reclaim-name { flex: 1; }
+.reclaim-tag { color: var(--muted); font-size: 12px; }
 
 /* ---------- Top bar ---------- */
 #topbar {
