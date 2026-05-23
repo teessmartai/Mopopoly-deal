@@ -178,6 +178,22 @@ wss.on('connection', (ws) => {
         broadcast();
         return;
       }
+      if (msg.type === 'reclaim') {
+        // Reclaim an existing seat by index. Unlike `resume` (which needs the
+        // origin-bound localStorage token), this lets a player who came back on
+        // a different address — e.g. the host's LAN IP changed mid-game — get
+        // back into their seat. We hand the seat's token back so this origin can
+        // resume normally from now on.
+        const seat = Number(msg.seat);
+        const player = Number.isInteger(seat) ? game.state.players[seat] : null;
+        if (!player) { send(ws, { type: 'need_join', reason: gateReason() }); return; }
+        ws.token = player.token; ws.seat = player.seat;
+        trackConnection(player.token, ws);
+        game.setConnected(player.seat, true);
+        send(ws, { type: 'welcome', token: player.token, seat: player.seat });
+        broadcast();
+        return;
+      }
       if (msg.type === 'join') {
         if (game.state.phase !== 'lobby') throw new Error('A game is already in progress — you can watch, or wait for the next round.');
         const token = crypto.randomUUID();

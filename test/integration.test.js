@@ -107,16 +107,31 @@ async function run() {
   console.log('  ok  reconnect restores seat and hand');
   passed++;
 
+  // Reclaim test: Bob comes back on a "different address" (a fresh client with
+  // no token) and reclaims his seat by index. He gets the same seat + hand back
+  // and is handed the seat's token for future resumes.
+  b2.ws.close();
+  await wait(150);
+  await until(() => a.state.players[1].connected === false, 2000);
+  const b3 = new Client(); await b3.open();
+  b3.send({ type: 'reclaim', seat: bobSeat });
+  await until(() => b3.seat === bobSeat && b3.state && b3.state.yourHand.length === bobHandLen, 2000);
+  assert.strictEqual(b3.state.yourSeat, bobSeat);
+  assert.strictEqual(b3.token, bobToken, 'reclaim returns the seat token');
+  await until(() => a.state.players[1].connected === true, 2000);
+  console.log('  ok  reclaim restores seat by index without a token');
+  passed++;
+
   // Non-host cannot end the game.
-  b2.lastError = null;
-  b2.act('end_game');
+  b3.lastError = null;
+  b3.act('end_game');
   await wait(120);
   assert.strictEqual(a.state.phase, 'playing', 'non-host end_game must be ignored');
 
   // Host ends the game mid-play -> everyone wiped back to an empty lobby.
-  a.needJoin = false; b2.needJoin = false;
+  a.needJoin = false; b3.needJoin = false;
   a.act('end_game');
-  await until(() => a.needJoin && b2.needJoin, 2000);
+  await until(() => a.needJoin && b3.needJoin, 2000);
   await until(() => a.state && a.state.phase === 'lobby' && a.state.players.length === 0, 2000);
 
   // A fresh join takes seat 0 and becomes the new host.
