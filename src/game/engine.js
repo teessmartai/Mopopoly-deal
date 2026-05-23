@@ -125,6 +125,18 @@ class Game {
     this.touch();
   }
 
+  // Wipe the game back to a brand-new, empty lobby. Unlike playAgain (which
+  // keeps the seated players for a quick rematch), this drops every player so
+  // a fresh group can join from scratch. Lets the host clear out a stale or
+  // abandoned game from any phase.
+  reset() {
+    const version = this.state.version; // keep monotonic so clients accept it
+    this.state = Game.freshLobby();
+    this.state.version = version;
+    this.log('Host ended the game. The lobby is empty — join to start a new game.');
+    this.touch();
+  }
+
   // ---- deck helpers ------------------------------------------------------
   _draw(n) {
     const s = this.state;

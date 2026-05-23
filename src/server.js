@@ -188,6 +188,20 @@ wss.on('connection', (ws) => {
         broadcast();
         return;
       }
+      if (msg.type === 'action' && msg.action === 'end_game') {
+        requireHost(ws.seat);
+        game.reset();
+        // The lobby is now empty, so every seat binding is stale. Send all
+        // connected clients back to the join screen for the fresh game.
+        for (const sock of sockets) {
+          sock.seat = null;
+          sock.token = null;
+          send(sock, { type: 'need_join', reason: null });
+        }
+        connectionsByToken.clear();
+        broadcast();
+        return;
+      }
       if (msg.type === 'action') {
         dispatchAction(ws, msg);
         broadcast();
