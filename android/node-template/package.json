@@ -1,0 +1,10 @@
+{
+  "name": "mopopoly-deal-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Embedded Node project for the Android host. src/ and public/ are copied from the repo root at build time; this only pins the runtime dependency.",
+  "main": "mobile-main.js",
+  "dependencies": {
+    "ws": "^8.21.0"
+  }
+}

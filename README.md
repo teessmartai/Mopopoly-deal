@@ -1,11 +1,16 @@
 # Mopopoly Deal
 
-A faithful, original digital version of the card game *Monopoly Deal* that you
-host on a **Windows laptop** by double-clicking one file. Everyone else plays
-from the web browser on their **phones** — no app to install, nothing to set up.
+A faithful, original digital version of the card game *Monopoly Deal*. Everyone
+plays from the web browser on their **phones** — no app to install, nothing to
+set up. You host the game in one of two ways:
+
+- on a **Windows laptop**, by double-clicking one file (the steps below), or
+- on a **personal Android phone**, by installing one app — handy when your only
+  computer is a locked-down work laptop. See
+  **[Host on an Android phone](#host-on-an-android-phone)**.
 
 This guide is written for someone who has **never used a terminal**. If you can
-double-click a file and read your laptop's screen, you can run this.
+double-click a file (or install a phone app) and read a screen, you can run this.
 
 ---
 
@@ -155,6 +160,103 @@ it's their turn and they're gone, the **host** sees a **"Skip"** button.
 
 ---
 
+## Host on an Android phone
+
+Instead of a Windows laptop, you can host the whole game on a **personal Android
+phone**. Players still join from their own phone browsers exactly as above —
+nothing changes for them. This is the best option if your only computer is a
+**locked-down work laptop** that won't let you run downloaded programs.
+
+You only need **one** Android phone to be the host. It can also play.
+
+### Step 1 — Get the game app (`MopopolyDeal.apk`)
+
+1. Open the repository on **GitHub** in any browser.
+2. Click the **"Actions"** tab near the top.
+3. In the list on the left, click **"Build Android APK"**.
+4. Click the most recent successful run (green check ✓). To get a fresh one,
+   click **"Run workflow"** first and wait a few minutes.
+5. Scroll to **"Artifacts"** and download **"MopopolyDeal-android"**. It arrives
+   as a `.zip`.
+6. On the Android phone, **unzip it** (most file managers do this with a tap).
+   Inside is **`MopopolyDeal.apk`**.
+
+> The file is fairly large (around 40–70 MB). That's normal — it has a complete
+> copy of the game's engine built inside it, so nothing else needs installing.
+
+### Step 2 — Install the app (one-time friction, fully expected)
+
+Because this app doesn't come from the Google Play Store, Android shows a couple
+of warnings the first time. **This is normal for any app installed outside the
+Play Store** — it does not mean anything is wrong. (It's the Android equivalent
+of the Windows SmartScreen prompt above.)
+
+1. **Tap the `MopopolyDeal.apk` file** to install it.
+2. Android may say *"For your security, your phone isn't allowed to install
+   unknown apps from this source."* Tap **Settings**, then turn on
+   **"Allow from this source"** for the app you're installing from (your file
+   manager or browser). Go **back** and continue.
+3. You'll likely see a **Google Play Protect** box: *"Unsafe app blocked"* or
+   *"…wasn't scanned…"*. Tap **"More details"** (or **"Install anyway"**), then
+   **Install anyway**. (Play Protect flags apps it hasn't seen before; it isn't
+   a virus warning.)
+4. When it finishes, tap **Open**.
+
+If you can't find an "Install anyway" option, tap **More details** first — it
+appears after that.
+
+### Step 3 — Start hosting
+
+1. **Open the "Mopopoly Deal" app.** The first time, allow the **notification**
+   permission if it asks (it's used for the "is hosting" notice).
+2. The app shows a **host screen** with:
+   - a big web address like `http://192.168.1.23:47800`, and
+   - a **QR code** players can scan.
+3. A notification appears: **"Mopopoly Deal is hosting."** This keeps the game
+   running even if the screen turns off. **Leave the app open** and the phone
+   **awake**; **plug it in** for longer sessions.
+
+To take a seat and play on the host phone too, tap **"Play on this phone too"**.
+
+### Step 4 — Players join (same as on a laptop)
+
+Every other player either **scans the QR code** with their phone camera, or
+types the **web address** into their phone browser, then enters a name and taps
+**Join Game**. Once 2–5 players are in, the **first player to join** taps
+**Start Game**. (Rules of play are identical — see **Step 4** above.)
+
+### Use a hotspot if players can't connect
+
+All phones must be on the **same network**. The simplest reliable setup is the
+host phone's own **Personal Hotspot**:
+
+1. On the **host phone**, turn on the **Personal Hotspot**.
+2. Have **every player's phone** join that hotspot's WiFi.
+3. The address on the host screen updates automatically — players scan/type the
+   address shown there.
+
+This also sidesteps café/hotel/work WiFi that blocks phones from reaching each
+other ("client isolation").
+
+### Stopping, and if something goes wrong
+
+- **Stop hosting:** pull down the notification and tap **"Stop hosting"** (this
+  closes the server). Your game is saved.
+- **App closed / phone restarted:** just **re-open the app** — the in-progress
+  game is restored from a save file in the app's private storage, and players
+  re-open their page to land back in their exact seat.
+- **A phone can't load the page:** make sure it's on the **same WiFi/hotspot** as
+  the host phone, and that the address (including the `:47800`) was typed exactly.
+- **Host phone went to sleep and players got stuck:** keep the host phone awake
+  and plugged in; aggressive battery savers on some phones can pause background
+  apps (see [NOTES.md](NOTES.md) → battery/Doze).
+
+> **iPhone hosts are not supported** (iOS app distribution requires the App
+> Store / a paid developer account). iPhones can still **play** as clients in any
+> browser, and can host via the Windows option on a laptop.
+
+---
+
 ## For developers
 
 - **Run from source:** `npm install` then `npm start`, then open the printed
@@ -177,6 +279,69 @@ it's their turn and they're gone, the **host** sees a **"Skip"** button.
   `.github/workflows/build.yml` builds the exe and uploads it as a downloadable
   artifact on every push, on manual "Run workflow", and attaches it to a Release
   for tagged builds. See Step 1 above.
+
+### Building the Android APK
+
+The Android host embeds a real Node.js runtime via
+[`nodejs-mobile`](https://github.com/nodejs-mobile/nodejs-mobile) and runs the
+**same `src/`** as the exe (copied into the app at build time, so `src/` stays
+the single source of truth). The native wrapper lives in `android/`.
+
+- **Automated build (no local tools needed):** the GitHub Actions workflow at
+  `.github/workflows/android.yml` runs the tests, builds the APK, and uploads it
+  as the **"MopopolyDeal-android"** artifact (on push, manual "Run workflow", and
+  attached to a Release for tags). This is the recommended way to get an APK —
+  see **[Host on an Android phone → Step 1](#step-1--get-the-game-app-mopopolydealapk)**.
+
+- **Build locally from a clean checkout.** Requirements: **JDK 17**, the
+  **Android SDK** with **NDK 26.1.10909125** and **CMake 3.22.1**, and **Node 18+**.
+  Set `ANDROID_HOME` (or create `android/local.properties` with `sdk.dir=...`).
+
+  ```bash
+  npm ci
+
+  # 1. Download the nodejs-mobile prebuilt core library (Node ~18) and place it
+  #    at android/app/libnode (bin/<abi>/libnode.so + include/node/).
+  V=18.20.4
+  curl -fL "https://github.com/nodejs-mobile/nodejs-mobile/releases/download/v$V/nodejs-mobile-v$V-android.zip" -o /tmp/nm.zip
+  mkdir -p /tmp/nm android/app/libnode
+  unzip -q /tmp/nm.zip -d /tmp/nm
+  cp -R /tmp/nm/bin android/app/libnode/bin
+  cp -R /tmp/nm/include android/app/libnode/include
+
+  # 2. Assemble the embedded Node project from src/ + public/.
+  bash scripts/prepare-node-project.sh
+
+  # 3. Build the APK.
+  cd android
+  ./gradlew assembleRelease     # or: assembleDebug
+  ```
+
+  The APK appears at `android/app/build/outputs/apk/release/app-release.apk`.
+
+- **Signing.** Without a keystore, the **release** build falls back to the
+  **debug** signing key — installable, fine for testing, but Android treats it
+  as a different app from a properly-signed one (no in-place upgrade). To produce
+  a **release-signed** APK, generate a keystore once:
+
+  ```bash
+  keytool -genkeypair -v -keystore mopopoly-release.jks \
+    -keyalg RSA -keysize 2048 -validity 10000 -alias mopopoly
+  ```
+
+  Then create `android/keystore.properties` (git-ignored):
+
+  ```
+  storeFile=/absolute/path/to/mopopoly-release.jks
+  storePassword=...
+  keyAlias=mopopoly
+  keyPassword=...
+  ```
+
+  For CI, store the keystore (base64) and passwords as the repository secrets
+  `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
+  `ANDROID_KEY_PASSWORD`; the workflow wires them up automatically and otherwise
+  builds a debug-signed APK.
 
 Technology choices, the exact card composition, every rules edge-case decision,
 and known limitations are documented in **[NOTES.md](NOTES.md)**.
