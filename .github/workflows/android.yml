@@ -1,12 +1,12 @@
 name: Build Android APK
 
-# How a non-technical maintainer gets the .apk:
+# How a non-technical maintainer gets the .apk (downloads directly, no unzip):
 #   1. Open the repository on GitHub.
-#   2. Click the "Actions" tab.
-#   3. Choose "Build Android APK" on the left, then "Run workflow".
-#   4. When it finishes (green check), open the run and download the
-#      "MopopolyDeal-android" artifact (a .zip containing the .apk).
-# No terminal or local tools required. See README.md → "Host on an Android phone".
+#   2. Click the "Actions" tab, choose "Build Android APK", then "Run workflow".
+#   3. When it finishes (green check), open the repo's "Releases" page and
+#      download "MopopolyDeal.apk" from the latest Android release.
+# (The "Actions" artifact below is a .zip — convenient for developers, but the
+#  Release gives phone users a direct .apk. See README → "Host on an Android phone".)
 
 on:
   push:
@@ -103,15 +103,40 @@ jobs:
           chmod +x ./gradlew
           ./gradlew --no-daemon assembleRelease
 
-      - name: Upload the APK as a downloadable artifact
+      - name: Rename APK to MopopolyDeal.apk
+        run: |
+          set -euo pipefail
+          mkdir -p dist-apk
+          cp android/app/build/outputs/apk/release/*.apk dist-apk/MopopolyDeal.apk
+          ls -la dist-apk
+
+      - name: Upload the APK as a downloadable artifact (zips on download)
         uses: actions/upload-artifact@v4
         with:
           name: MopopolyDeal-android
-          path: android/app/build/outputs/apk/release/*.apk
+          path: dist-apk/MopopolyDeal.apk
           retention-days: 5      # keep storage small; rebuild any time
 
-      - name: Attach the APK to a GitHub Release (tagged builds only)
+      # GitHub artifacts are always delivered as a .zip. A Release attaches the
+      # raw .apk so phone users can download and install it directly (no unzip).
+      - name: Publish APK to the rolling "android-latest" release (direct .apk)
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-latest
+          name: Mopopoly Deal — latest Android APK
+          prerelease: true
+          files: dist-apk/MopopolyDeal.apk
+          body: |
+            Direct-download Android APK — **tap `MopopolyDeal.apk` below to install on your phone** (no unzip needed).
+
+            See the README → "Host on an Android phone" for install steps (enabling
+            "install unknown apps" and the one-time Play Protect prompt).
+
+            This release is rebuilt automatically from the latest code.
+
+      - name: Attach the APK to a versioned GitHub Release (tagged builds only)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: android/app/build/outputs/apk/release/*.apk
+          files: dist-apk/MopopolyDeal.apk

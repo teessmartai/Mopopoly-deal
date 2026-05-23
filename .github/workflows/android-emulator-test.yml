@@ -1,0 +1,103 @@
+name: Test Android APK (emulator)
+
+# Boots an x86_64 Android emulator (with KVM on GitHub's Linux runners),
+# installs the app, and runs an on-device instrumented test that asserts the
+# embedded Node server starts and the host screen (/host) renders in the
+# WebView. This is the "test the real APK without a phone" path.
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch: {}
+
+env:
+  NODEJS_MOBILE_VERSION: '18.20.4'
+
+jobs:
+  emulator-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests (shared game engine + server)
+        run: npm test
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK and CMake
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "ndk;26.1.10909125" "cmake;3.22.1"
+
+      - name: Download nodejs-mobile prebuilt libraries
+        run: |
+          set -euo pipefail
+          ZIP="nodejs-mobile-v${NODEJS_MOBILE_VERSION}-android.zip"
+          URL="https://github.com/nodejs-mobile/nodejs-mobile/releases/download/v${NODEJS_MOBILE_VERSION}/${ZIP}"
+          echo "Downloading $URL"
+          curl -fL --retry 4 --retry-delay 4 "$URL" -o /tmp/nodejs-mobile.zip
+          rm -rf /tmp/nm && mkdir -p /tmp/nm android/app/libnode
+          unzip -q /tmp/nodejs-mobile.zip -d /tmp/nm
+          BIN_DIR="$(find /tmp/nm -maxdepth 3 -type d -name bin -print -quit)"
+          SRC="$(dirname "$BIN_DIR")"
+          cp -R "$SRC/bin" android/app/libnode/bin
+          cp -R "$SRC/include" android/app/libnode/include
+          echo "libnode ABIs:"; ls android/app/libnode/bin
+          test -f android/app/libnode/bin/x86_64/libnode.so
+
+      - name: Assemble the embedded Node project (from src/ + public/)
+        run: bash scripts/prepare-node-project.sh
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run instrumented host-flow test on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          ram-size: 4096M
+          cores: 2
+          disable-animations: true
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          working-directory: android
+          script: |
+            adb logcat -c || true
+            ./gradlew connectedDebugAndroidTest -Pmopopoly.abis=x86_64 --no-daemon; RC=$?
+            adb logcat -d > logcat.txt 2>&1 || true
+            exit $RC
+
+      - name: Upload test reports and logcat
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-emulator-test-reports
+          path: |
+            android/logcat.txt
+            android/app/build/reports/androidTests/**
+            android/app/build/outputs/androidTest-results/**
+          retention-days: 5
+          if-no-files-found: ignore
