@@ -14,6 +14,12 @@ if (hasKeystore) {
     keystoreProps.load(new FileInputStream(keystorePropsFile))
 }
 
+// ABIs to build. Defaults to phone ABIs for the shipping APK; the emulator
+// test workflow overrides this with -Pmopopoly.abis=x86_64 so the APK runs on
+// an x86_64 emulator (nodejs-mobile ships an x86_64 libnode.so too).
+def abiList = ((project.findProperty('mopopoly.abis') ?: 'arm64-v8a,armeabi-v7a') as String)
+        .split(',').collect { it.trim() }.findAll { it }
+
 android {
     namespace 'com.mopopoly.deal'
     compileSdk 34
@@ -26,9 +32,10 @@ android {
         versionCode 1
         versionName "1.0.0"
 
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
         ndk {
-            // Modern phones are arm64; armeabi-v7a covers older 32-bit devices.
-            abiFilters 'arm64-v8a', 'armeabi-v7a'
+            abiFilters.addAll(abiList)
         }
         externalNativeBuild {
             cmake {
@@ -92,4 +99,13 @@ android {
 
 dependencies {
     implementation 'androidx.core:core-ktx:1.13.1'
+
+    // Instrumented (on-emulator) UI test that the embedded server boots and the
+    // host screen renders. Run with: ./gradlew connectedDebugAndroidTest
+    androidTestImplementation 'androidx.test:core:1.6.1'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test:rules:1.6.1'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
+    androidTestImplementation 'androidx.test.espresso:espresso-web:3.6.1'
 }
