@@ -1,0 +1,53 @@
+name: Build Windows EXE
+
+# How a non-technical maintainer gets the .exe:
+#   1. Open the repository on GitHub.
+#   2. Click the "Actions" tab.
+#   3. Choose "Build Windows EXE" on the left, then "Run workflow".
+#   4. When it finishes (green check), open the run and download the
+#      "MopopolyDeal-windows" artifact (a .zip containing MopopolyDeal.exe).
+# No terminal or local tools required.
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  workflow_dispatch: {}
+
+permissions:
+  contents: write   # needed to attach the exe to a Release on tag builds
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build the Windows .exe
+        run: npm run build:win
+
+      - name: Upload the .exe as a downloadable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MopopolyDeal-windows
+          path: dist/MopopolyDeal.exe
+          retention-days: 5      # keep storage small; rebuild any time
+
+      - name: Attach the .exe to a GitHub Release (tagged builds only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/MopopolyDeal.exe

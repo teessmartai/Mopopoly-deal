@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d3b2e" />
+  <title>Mopopoly Deal</title>
+  <link rel="icon" href="favicon.svg" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Connection / join screen -->
+  <div id="join" class="screen">
+    <div class="join-card">
+      <h1 class="logo">MOPOPOLY<span>DEAL</span></h1>
+      <p id="join-sub" class="sub">Enter your name to join the table.</p>
+      <input id="name-input" type="text" maxlength="20" placeholder="Your name" autocomplete="off" />
+      <button id="join-btn" class="primary big">Join Game</button>
+      <p id="join-msg" class="msg"></p>
+      <p id="conn-status" class="conn">Connecting…</p>
+    </div>
+  </div>
+
+  <!-- Main game screen -->
+  <div id="game" class="screen hidden">
+    <header id="topbar">
+      <div class="turn-info">
+        <span id="turn-name">—</span>
+        <span id="plays-left" class="pill"></span>
+      </div>
+      <div class="piles">
+        <span class="pile" title="Draw pile">🂠 <b id="deck-count">0</b></span>
+        <span class="pile" title="Discard pile">🗑 <b id="discard-count">0</b></span>
+        <button id="log-toggle" class="ghost" title="Show log">☰</button>
+      </div>
+    </header>
+
+    <div id="prompt"></div>
+
+    <main id="board">
+      <section id="opponents"></section>
+      <section id="me-area"></section>
+    </main>
+
+    <footer id="controls"></footer>
+
+    <aside id="log-panel" class="hidden">
+      <div class="log-head"><b>Game Log</b><button id="log-close" class="ghost">✕</button></div>
+      <ul id="log-list"></ul>
+    </aside>
+  </div>
+
+  <!-- Modal overlay for multi-step choices -->
+  <div id="overlay" class="overlay hidden">
+    <div id="modal" class="modal"></div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

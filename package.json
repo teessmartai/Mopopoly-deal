@@ -1,0 +1,29 @@
+{
+  "name": "mopopoly-deal",
+  "version": "1.0.0",
+  "description": "A faithful digital Monopoly Deal you host on a Windows laptop; players join from phone browsers over the local network.",
+  "license": "MIT",
+  "main": "src/server.js",
+  "bin": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node test/engine.test.js && node test/integration.test.js",
+    "build:win": "pkg . --targets node22-win-x64 --output dist/MopopolyDeal.exe"
+  },
+  "dependencies": {
+    "qrcode-terminal": "^0.12.0",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^6.19.0"
+  },
+  "pkg": {
+    "assets": [
+      "public/**/*"
+    ],
+    "targets": [
+      "node22-win-x64"
+    ],
+    "outputPath": "dist"
+  }
+}
