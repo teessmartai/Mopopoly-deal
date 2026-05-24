@@ -273,7 +273,7 @@ function playerPanel(p, isMe) {
   for (const color of COLOR_ORDER) {
     const set = p.sets[color];
     if (!set) continue;
-    sets.appendChild(setColumn(color, set));
+    sets.appendChild(setColumn(color, set, isMe));
   }
   if (Object.keys(p.sets).length === 0) sets.appendChild(el('div', 'set-count', 'no properties yet'));
   panel.appendChild(sets);
@@ -287,11 +287,11 @@ function playerPanel(p, isMe) {
   return panel;
 }
 
-function setColumn(color, set) {
+function setColumn(color, set, isMe) {
   const def = COLORS[color];
   const col = el('div', 'setcol' + (set.complete ? ' complete' : ''));
   const bar = el('div', 'set-bar'); bar.style.background = def.hex; col.appendChild(bar);
-  for (const c of set.cards) col.appendChild(miniCard(c, color));
+  for (const c of set.cards) col.appendChild(miniCard(c, color, isMe));
   const cnt = el('div', 'set-count', `${set.cards.length}/${def.size}`); col.appendChild(cnt);
   if (set.rent > 0) col.appendChild(el('div', 'set-rent', `$${set.rent}M`));
   if (set.house) col.appendChild(el('div', 'bldg', '🏠'));
@@ -299,13 +299,44 @@ function setColumn(color, set) {
   return col;
 }
 
-function miniCard(card, color) {
+// Human-readable list of the colors a wild can occupy.
+function wildColorLabels(card) {
+  const cols = card.colors === 'any' ? COLOR_ORDER : card.colors;
+  return cols.map((c) => (COLORS[c] ? COLORS[c].label : c)).join(' / ');
+}
+
+function miniCard(card, color, isMe) {
   const m = el('div', 'mini' + ((card.type === 'wild') ? ' wild' : ''));
   if (card.type === 'wild') {
-    m.textContent = card.colors === 'any' ? '★' : 'W';
+    if (card.colors === 'any') {
+      m.textContent = '★';
+      m.title = `Wild — any color (currently ${COLORS[color] ? COLORS[color].label : '?'})`;
+    } else {
+      // Show every color this wild can be, so opponents can tell at a glance
+      // what they'd get from a Sly/Forced Deal — not just its current set.
+      m.classList.add('wild-two');
+      const stripes = el('div', 'wild-stripes');
+      for (const col of card.colors) {
+        const s = el('i');
+        s.style.background = COLORS[col] ? COLORS[col].hex : '#555';
+        if (col === color) s.classList.add('cur');
+        stripes.appendChild(s);
+      }
+      m.appendChild(stripes);
+      m.appendChild(el('span', 'wild-w', 'W'));
+      m.title = `Wild: ${wildColorLabels(card)} (currently ${COLORS[color] ? COLORS[color].label : '?'})`;
+    }
   } else {
     m.style.background = COLORS[color] ? COLORS[color].hex : '#555';
     m.textContent = shortName(card);
+  }
+  // On your own turn, tap a wild to move it to another color (free, unlimited).
+  if (isMe && card.type === 'wild') {
+    m.classList.add('movable');
+    m.onclick = () => {
+      if (isMyTurn()) flowMoveWild(card, color);
+      else toast('You can rearrange wild cards on your turn.');
+    };
   }
   return m;
 }
@@ -654,7 +685,12 @@ function stealablePropertyOptions(seat) {
   const out = [];
   for (const color of COLOR_ORDER) {
     const set = p.sets[color]; if (!set || set.complete) continue;
-    for (const c of set.cards) out.push({ label: `${c.name === undefined ? 'Wild' : c.name} (${COLORS[color].label})`, value: c.uid, swatch: COLORS[color].hex });
+    for (const c of set.cards) {
+      const label = c.type === 'wild'
+        ? `Wild [${wildColorLabels(c)}] — in ${COLORS[color].label}`
+        : `${c.name} (${COLORS[color].label})`;
+      out.push({ label, value: c.uid, swatch: COLORS[color].hex });
+    }
   }
   return out;
 }
@@ -699,6 +735,27 @@ async function flowDebtCollector(card) {
   const targetSeat = await choose('Debt Collector — pick a player', 'They owe you $5M.', opponentOptions());
   if (targetSeat === undefined) return;
   act('play_debt_collector', { uid: card.uid, targetSeat });
+}
+
+// Move an already-played wild to a different color. This is a free action with
+// no per-turn limit, so it stays available even after all 3 plays are spent.
+async function flowMoveWild(card, fromColor) {
+  const m = me();
+  const all = card.colors === 'any' ? COLOR_ORDER : card.colors;
+  const targets = all.filter((c) => c !== fromColor);
+  if (targets.length === 0) { toast('This wild has no other color.'); return; }
+  const opts = targets.map((c) => {
+    const owned = m && m.sets[c] ? m.sets[c].cards.length : 0;
+    return {
+      label: `Move to ${COLORS[c].label}`,
+      value: c,
+      swatch: COLORS[c].hex,
+      hint: owned ? `${owned}/${COLORS[c].size}` : 'new set',
+    };
+  });
+  const toColor = await choose('Move wild card', 'Rearranging wilds is free and unlimited on your turn.', opts);
+  if (toColor === undefined) return;
+  act('move_wild', { uid: card.uid, toColor });
 }
 
 async function flowBuilding(card) {
