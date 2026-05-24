@@ -254,6 +254,52 @@ test('a set of only rainbow wilds does not count toward winning', () => {
   assert.strictEqual(g.completeSetCount(a), 0);
 });
 
+// --- moving wild cards -----------------------------------------------------
+test('moveWild relocates a wild to another color without spending a play', () => {
+  const g = new Game();
+  g.addPlayer('A', 't1'); g.addPlayer('B', 't2'); g.start();
+  const a = g.state.players[0];
+  a.sets.red = {
+    cards: [{ uid: 9950, type: 'wild', name: 'Red/Yellow Wild', colors: ['red', 'yellow'], value: 3, assignedColor: 'red' }],
+    house: false, hotel: false,
+  };
+  const playsBefore = g.state.turn.playsRemaining;
+  g.moveWild(0, 9950, 'yellow');
+  assert.strictEqual(g.state.players[0].sets.red, undefined); // emptied set is pruned
+  assert.ok(g.state.players[0].sets.yellow);
+  assert.strictEqual(g.state.players[0].sets.yellow.cards[0].assignedColor, 'yellow');
+  assert.strictEqual(g.state.turn.playsRemaining, playsBefore); // free action
+});
+
+test('moveWild rejects an invalid color and non-wild cards', () => {
+  const g = new Game();
+  g.addPlayer('A', 't1'); g.addPlayer('B', 't2'); g.start();
+  const a = g.state.players[0];
+  a.sets.red = {
+    cards: [{ uid: 9951, type: 'wild', name: 'Red/Yellow Wild', colors: ['red', 'yellow'], value: 3, assignedColor: 'red' }],
+    house: false, hotel: false,
+  };
+  assert.throws(() => g.moveWild(0, 9951, 'green')); // green is not on this wild
+  const prop = makeProperty(g, 'green');
+  a.sets.green = { cards: [prop], house: false, hotel: false };
+  assert.throws(() => g.moveWild(0, prop.uid, 'brown')); // not a wild at all
+});
+
+test('moveWild can complete a set and win the game', () => {
+  const g = new Game();
+  g.addPlayer('A', 't1'); g.addPlayer('B', 't2'); g.start();
+  const a = g.state.players[0];
+  a.sets.brown = { cards: [makeProperty(g, 'brown'), makeProperty(g, 'brown')], house: false, hotel: false };
+  a.sets.blue = { cards: [makeProperty(g, 'blue'), makeProperty(g, 'blue')], house: false, hotel: false };
+  // Two greens already; the green/blue wild is parked in blue.
+  a.sets.green = { cards: [makeProperty(g, 'green'), makeProperty(g, 'green')], house: false, hotel: false };
+  a.sets.blue.cards.push({ uid: 9952, type: 'wild', name: 'Green/Railroad Wild', colors: ['green', 'blue'], value: 4, assignedColor: 'blue' });
+  assert.strictEqual(g.completeSetCount(a), 2);
+  g.moveWild(0, 9952, 'green'); // completes the third set
+  assert.strictEqual(g.state.phase, 'finished');
+  assert.strictEqual(g.state.winnerSeat, 0);
+});
+
 // --- end of turn / hand limit ---------------------------------------------
 test('hand over 7 forces a discard at end of turn', () => {
   const g = new Game();
