@@ -229,6 +229,7 @@ function renderLobby() {
     btn.disabled = !canStart;
     btn.onclick = () => act('start_game');
     wrap.appendChild(btn);
+    if (state.players.length) wrap.appendChild(hostEndGameButton());
     wrap.appendChild(el('div', 'lobby-hint', 'Players join from their phones. Start when everyone is in (2–5 players).'));
   } else if (mySeat == null) {
     wrap.appendChild(el('div', 'lobby-hint', 'Watching the lobby. Reload and enter a name to join while seats are open.'));
@@ -393,6 +394,15 @@ function isLight(hex) {
   return (r * 299 + g * 587 + b * 114) / 1000 > 150;
 }
 
+// Host-only button that wipes the whole game back to an empty lobby.
+function hostEndGameButton() {
+  const b = el('button', 'danger', 'End Game');
+  b.onclick = () => {
+    if (confirm('End the game and clear all players? Everyone returns to the join screen.')) act('end_game');
+  };
+  return b;
+}
+
 // ----- Controls (footer) ---------------------------------------------------
 function renderControls() {
   const ctrl = $('controls'); ctrl.innerHTML = '';
@@ -401,12 +411,15 @@ function renderControls() {
       const b = el('button', 'primary', 'Play Again (same players)');
       b.onclick = () => act('play_again');
       ctrl.appendChild(b);
+      ctrl.appendChild(hostEndGameButton());
     } else {
       const span = el('div', 'lobby-hint', 'Waiting for the host to start a new round…');
       ctrl.appendChild(span);
     }
     return;
   }
+  // Host can abandon a stale or unwanted game at any time.
+  if (me() && me().isHost) ctrl.appendChild(hostEndGameButton());
   // Host skip control if the current player is stuck disconnected.
   if (state.paused && me() && me().isHost) {
     const b = el('button', 'danger', `Skip ${state.players[state.turn.seat].name} (disconnected)`);
